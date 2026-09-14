@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Bilibili 本地时间轴与截图",
+  "version": "2.3.1",
+  "description": "导入本地时间轴、点击跳转视频，并把播放栏截图和时间线保存到本地文件夹。",
+  "content_scripts": [
+    {
+      "matches": ["https://www.bilibili.com/video/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Bilibili 本地时间轴",
+    "default_popup": "popup.html"
+  }
+}
