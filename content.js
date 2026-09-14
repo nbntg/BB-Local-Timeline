@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili 本地时间轴跳转
 // @namespace    https://github.com/AliubYiero/Yiero_WebScripts
-// @version      2.3.1
+// @version      2.3.2
 // @description  导入本地时间轴、跳转视频，并将截图与截图时间线保存到本地文件夹。
 // @author       Codex
 // @match        https://www.bilibili.com/video/*
@@ -897,12 +897,35 @@
         return card;
     }
 
-    async function refreshManager() {
+    function captureManagerScroll() {
+        const grid = managerState?.overlay?.querySelector('.codex-manager-grid');
+        if (!grid) return null;
+        const cards = [...grid.querySelectorAll('.codex-manager-card')];
+        const scrollTop = grid.scrollTop;
+        const anchor = cards.find((card) => card.offsetTop + card.offsetHeight > scrollTop + 1) || cards[cards.length - 1];
+        return {
+            scrollTop,
+            fileName: anchor?.dataset.fileName || '',
+            offset: anchor ? scrollTop - anchor.offsetTop : 0,
+        };
+    }
+
+    function restoreManagerScroll(scrollState) {
+        const grid = managerState?.overlay?.querySelector('.codex-manager-grid');
+        if (!grid || !scrollState) return;
+        const anchor = scrollState.fileName ? grid.querySelector(`[data-file-name="${CSS.escape(scrollState.fileName)}"]`) : null;
+        const nextTop = anchor ? anchor.offsetTop + scrollState.offset : scrollState.scrollTop;
+        grid.scrollTop = Math.max(0, Math.min(nextTop, grid.scrollHeight - grid.clientHeight));
+    }
+
+    async function refreshManager(scrollState = captureManagerScroll()) {
         if (!managerState) return;
         const timeline = await readScreenshotTimeline(managerState.directory);
         managerState.markdown = timeline.markdown;
         managerState.entries = timeline.entries;
         await renderManager();
+        restoreManagerScroll(scrollState);
+        window.requestAnimationFrame(() => restoreManagerScroll(scrollState));
     }
 
     function selectedManagerEntries() {
@@ -945,6 +968,7 @@
             if (actionName === '清理失效记录') showToast('没有失效记录');
             return;
         }
+        const scrollState = captureManagerScroll();
         const uniqueEntries = [...new Map(entries.map((entry) => [entry.fileName, entry])).values()];
         if (!window.confirm(`${actionName} ${uniqueEntries.length} 项？图片会移动到当前视频文件夹的 _deleted 子文件夹。`)) return;
         try {
@@ -956,7 +980,7 @@
                 if (entry.exists === false) continue;
                 try { await managerState.directory.removeEntry(entry.fileName); } catch (error) { console.warn('[本地时间轴] 原图删除失败，备份仍保留在 _deleted', error); }
             }
-            await refreshManager();
+            await refreshManager(scrollState);
             showToast(`已处理 ${uniqueEntries.length} 项`);
         } catch (error) {
             console.error('[本地时间轴] 删除截图失败', error);
