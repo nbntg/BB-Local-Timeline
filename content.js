@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili 本地时间轴跳转
 // @namespace    https://github.com/AliubYiero/Yiero_WebScripts
-// @version      2.4.2
+// @version      2.5.1
 // @description  导入本地时间轴、跳转视频，并将截图与截图时间线保存到本地文件夹。
 // @author       Codex
 // @match        https://www.bilibili.com/video/*
@@ -455,6 +455,10 @@
             #${MANAGER_ID} .codex-manager-sort-label { display:inline-flex; align-items:center; gap:6px; margin-left:auto; color:#61666d; font-size:13px; }
             #${MANAGER_ID} .codex-manager-toolbar button.codex-manager-sort { height:32px; padding:0 10px; color:#172033; background:#fff; border:1px solid #dfe3e8; border-radius:6px; font:inherit; }
             #${MANAGER_ID} .codex-manager-toolbar button.codex-manager-sort:hover { color:#172033; background:#f4f6f8; }
+            #${MANAGER_ID}-lightbox .codex-lightbox-nav { position:absolute; top:50%; z-index:1; width:42px; height:64px; padding:0; color:#fff; background:rgba(20,30,50,.58); border:1px solid rgba(255,255,255,.28); border-radius:8px; font-size:42px; font-weight:300; line-height:52px; cursor:pointer; transform:translateY(-50%); }
+            #${MANAGER_ID}-lightbox .codex-lightbox-nav:hover { background:rgba(20,30,50,.82); }
+            #${MANAGER_ID}-lightbox .codex-lightbox-prev { left:24px; }
+            #${MANAGER_ID}-lightbox .codex-lightbox-next { right:24px; }
             #${CAPTURE_STATUS_ID} { position:absolute!important; top:16px; right:16px; z-index:2147483000; max-width:min(260px,calc(100% - 32px)); margin:0; }
         `;
         if (!style.isConnected) document.head.appendChild(style);
@@ -787,6 +791,20 @@
         }, 1900);
     }
 
+    function installProgressJump() {
+        const progress = document.querySelector('.bpx-player-progress-wrap, .bpx-player-progress, .bpx-player-ctrl-progress');
+        if (!progress || progress.dataset.codexTimelineProgressBound === '1') return;
+        progress.dataset.codexTimelineProgressBound = '1';
+        progress.addEventListener('click', (event) => {
+            const video = getVideo();
+            if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+            const rect = progress.getBoundingClientRect();
+            if (!rect.width) return;
+            const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+            video.currentTime = ratio * video.duration;
+        }, true);
+    }
+
     function installCameraButton() {
         if (document.getElementById(CAMERA_BUTTON_ID)) return;
         const controls = document.querySelector('.bpx-player-control-bottom-right');
@@ -1072,13 +1090,26 @@
         const remove = makeButton('删除', 'lightbox-delete', 'danger');
         const next = makeButton('下一张', 'lightbox-next', '');
         const close = makeButton('关闭', 'lightbox-close', '');
+        const previousSide = makeButton('‹', 'lightbox-prev', 'codex-lightbox-nav codex-lightbox-prev');
+        const nextSide = makeButton('›', 'lightbox-next', 'codex-lightbox-nav codex-lightbox-next');
         previous.disabled = index <= 0;
         next.disabled = index >= managerState.entries.length - 1;
+        previousSide.disabled = previous.disabled;
+        nextSide.disabled = next.disabled;
         toolbar.append(previous, jump, remove, next, close, label);
+        modal.append(previousSide, nextSide);
         modal.appendChild(toolbar);
         modal.addEventListener('click', async (event) => {
             if (event.target === modal) {
                 closeLightbox();
+                return;
+            }
+            if (event.target === image) {
+                const imageRect = image.getBoundingClientRect();
+                const position = imageRect.width ? (event.clientX - imageRect.left) / imageRect.width : 0.5;
+                const currentIndex = managerState.entries.findIndex((item) => item.fileName === fileName);
+                if (position < 0.28 && currentIndex > 0) openLightbox(managerState.entries[currentIndex - 1].fileName);
+                if (position > 0.72 && currentIndex < managerState.entries.length - 1) openLightbox(managerState.entries[currentIndex + 1].fileName);
                 return;
             }
             const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;
@@ -1151,6 +1182,7 @@
             const panel = ensurePanel();
             mountPanel(panel);
             installCameraButton();
+            installProgressJump();
         };
         for (const method of ['pushState', 'replaceState']) {
             const original = window.history[method];
@@ -1169,6 +1201,7 @@
     ensurePanel();
     render();
     installCameraButton();
+    installProgressJump();
     installShortcutListener();
     installRouteWatcher();
 })();
