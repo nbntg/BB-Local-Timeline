@@ -1,25 +1,26 @@
-# BB Local Timeline
+# Chrome / Edge 扩展安装说明
 
-适用于 Chrome 和 Microsoft Edge 的 Bilibili 本地时间轴与截图扩展。
-
-## 功能
-
-- 导入本地 `.srt`、`.ass` 或 `.json` 时间轴，并按视频与分 P 保存。
-- 点击时间轴项目跳转到视频对应位置。
-- 播放栏相机按钮截取当前画面，并保存截图与 `timeline.md`。
-- 在截图管理页面预览、跳转、删除截图；点击图片外的区域可关闭放大预览。
-- 默认截图快捷键为 `Ctrl + Alt + C`，可在“设置”中自定义 Ctrl、Alt、Shift 和按键。
+这是原用户脚本的 Manifest V3 扩展版，不需要安装 Tampermonkey 或 ScriptCat。
 
 ## 安装
 
-1. 下载或克隆本仓库。
-2. 打开 Chrome/Edge 的扩展管理页面，并开启“开发者模式”。
-3. 选择“加载已解压的扩展”，选中本仓库目录。
+1. 解压本目录，或者直接解压配套的 `bilibili-local-timeline-extension.zip`。
+2. 在 Chrome / Edge 地址栏打开：
+   - Chrome：`chrome://extensions`
+   - Edge：`edge://extensions`
+3. 打开右上角“开发者模式”。
+4. 点击“加载已解压的扩展”，选择本目录。
+5. 打开或刷新 `https://www.bilibili.com/video/...`。
 
-首次点击“目录”或相机按钮时，扩展会请求选择一个本地保存根目录。截图和时间线文档会写入按视频命名的子文件夹。
+## 使用
 
-## 说明
+- 右侧“时间轴”面板：导入 `.srt`、`.ass` 或 `.json`。
+- 默认快捷键为 `Ctrl + Alt + C`，点击“设置”可以自定义 Ctrl、Alt、Shift 和按键。
+- 截图管理支持悬停删除、正序/倒序排列；从放大预览跳转视频后会自动关闭管理页面。
+- 时间轴组件位于 Bilibili 右侧栏的弹幕列表与视频合集之间；导入后可收起/展开，也可以删除当前导入的时间轴。
+- 第一次点击“目录”或播放栏相机按钮时，选择本地保存根目录。
+- 播放栏右侧相机按钮：保存当前视频画面，并写入当前播放时间。
+- “截图管理”：全屏网格查看、点击看大图、跳转视频、批量删除；右上角 `×` 可关闭。
+- 删除的图片会移动到当前视频文件夹的 `_deleted` 子目录。
 
-本仓库只包含 Chrome/Edge 扩展源码，不包含个人截图、时间轴存档或 ZIP 压缩包。
-
-本项目借鉴了 [AliubYiero/Yiero_WebScripts](https://github.com/AliubYiero/Yiero_WebScripts) 中 Bilibili 视频时间轴相关的页面结构思路，并由 ChatGPT 协助完成扩展化、截图管理和交互调整。
+扩展版使用 Chrome / Edge 的 File System Access API，因此可以真实创建视频文件夹并写入 `timeline.md`。浏览器会在第一次使用时请求目录权限。

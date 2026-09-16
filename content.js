@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili 本地时间轴跳转
 // @namespace    https://github.com/AliubYiero/Yiero_WebScripts
-// @version      2.3.2
+// @version      2.4.0
 // @description  导入本地时间轴、跳转视频，并将截图与截图时间线保存到本地文件夹。
 // @author       Codex
 // @match        https://www.bilibili.com/video/*
@@ -352,6 +352,15 @@
         return [...entries].sort((a, b) => a.seconds - b.seconds || a.part - b.part || a.duplicate - b.duplicate || a.fileName.localeCompare(b.fileName));
     }
 
+    function getScreenshotSortOrder() {
+        return getStorage().screenshotSortOrder === 'asc' ? 'asc' : 'desc';
+    }
+
+    function sortManagerEntries(entries, order) {
+        const sorted = sortScreenshotEntries(entries);
+        return order === 'asc' ? sorted : sorted.reverse();
+    }
+
     function readManagedScreenshotEntries(markdown) {
         const match = markdown.match(new RegExp(`${TIMELINE_START}([\\s\\S]*?)${TIMELINE_END}`));
         if (!match) return [];
@@ -440,6 +449,11 @@
             #${PANEL_ID} .codex-timeline-meta, #${PANEL_ID} .codex-timeline-hint { padding:4px 14px 12px; color:#61666d; background:transparent; }
             #${PANEL_ID} .codex-timeline-list { padding:2px 8px 10px; background:transparent; }
             #${PANEL_ID} .codex-timeline-item:hover { background:#f1faff; }
+            #${MANAGER_ID} .codex-manager-card .codex-manager-delete-one { position:absolute; top:10px; right:10px; z-index:2; display:flex; width:28px; height:28px; align-items:center; justify-content:center; padding:0; color:#fff; background:rgba(214,69,69,.94); border:0; border-radius:50%; font-size:20px; line-height:1; cursor:pointer; opacity:0; pointer-events:none; transition:opacity .12s ease,transform .12s ease; }
+            #${MANAGER_ID} .codex-manager-card:hover .codex-manager-delete-one, #${MANAGER_ID} .codex-manager-card:focus-within .codex-manager-delete-one { opacity:1; pointer-events:auto; }
+            #${MANAGER_ID} .codex-manager-card .codex-manager-delete-one:hover { transform:scale(1.06); background:#d64545; }
+            #${MANAGER_ID} .codex-manager-sort-label { display:inline-flex; align-items:center; gap:6px; margin-left:auto; color:#61666d; font-size:13px; }
+            #${MANAGER_ID} .codex-manager-sort { height:32px; padding:0 8px; color:#172033; background:#fff; border:1px solid #dfe3e8; border-radius:6px; font:inherit; }
             #${CAPTURE_STATUS_ID} { position:absolute!important; top:16px; right:16px; z-index:2147483000; max-width:min(260px,calc(100% - 32px)); margin:0; }
         `;
         if (!style.isConnected) document.head.appendChild(style);
@@ -794,11 +808,12 @@
         try {
             const { directory } = await getCurrentVideoDirectory(true);
             const timeline = await readScreenshotTimeline(directory);
-            managerState = { directory, markdown: timeline.markdown, entries: timeline.entries, objectUrls: new Map(), overlay: null };
+            managerState = { directory, markdown: timeline.markdown, entries: timeline.entries, sortOrder: getScreenshotSortOrder(), objectUrls: new Map(), overlay: null };
             const overlay = document.createElement('section');
             overlay.id = MANAGER_ID;
             managerState.overlay = overlay;
             overlay.addEventListener('click', handleManagerClick);
+            overlay.addEventListener('change', handleManagerChange);
             document.body.appendChild(overlay);
             await renderManager();
         } catch (error) {
@@ -837,6 +852,17 @@
         const toolbar = document.createElement('div');
         toolbar.className = 'codex-manager-toolbar';
         toolbar.append(makeButton('刷新', 'manager-refresh', 'secondary'), makeButton('清理失效记录', 'manager-clean-missing', 'secondary'), makeButton('批量删除选中项', 'manager-delete-selected', 'danger'));
+        const sortLabel = document.createElement('label');
+        sortLabel.className = 'codex-manager-sort-label';
+        sortLabel.textContent = '排序';
+        const sortSelect = document.createElement('select');
+        sortSelect.dataset.action = 'manager-sort';
+        sortSelect.className = 'codex-manager-sort';
+        sortSelect.add(new Option('倒序（新→旧）', 'desc'));
+        sortSelect.add(new Option('正序（旧→新）', 'asc'));
+        sortSelect.value = managerState.sortOrder;
+        sortLabel.appendChild(sortSelect);
+        toolbar.appendChild(sortLabel);
         overlay.appendChild(toolbar);
         const grid = document.createElement('div');
         grid.className = 'codex-manager-grid';
@@ -846,7 +872,7 @@
             empty.textContent = '当前视频还没有截图。点击播放栏里的相机按钮即可创建。';
             grid.appendChild(empty);
         } else {
-            for (const entry of managerState.entries) grid.appendChild(await createManagerCard(entry));
+            for (const entry of sortManagerEntries(managerState.entries, managerState.sortOrder)) grid.appendChild(await createManagerCard(entry));
         }
         overlay.appendChild(grid);
     }
@@ -861,6 +887,11 @@
         check.dataset.fileName = entry.fileName;
         check.title = '选择此截图';
         card.appendChild(check);
+        const deleteButton = makeButton('×', 'manager-delete-one', 'codex-manager-delete-one');
+        deleteButton.dataset.fileName = entry.fileName;
+        deleteButton.title = '删除这张截图';
+        deleteButton.setAttribute('aria-label', '删除这张截图');
+        card.appendChild(deleteButton);
         const preview = document.createElement('button');
         preview.type = 'button';
         preview.className = 'codex-manager-preview';
@@ -941,7 +972,22 @@
         if (action === 'manager-refresh') await refreshManager();
         if (action === 'manager-clean-missing') await deleteScreenshotEntries(managerState.entries.filter((entry) => entry.exists === false), '清理失效记录');
         if (action === 'manager-delete-selected') await deleteScreenshotEntries(selectedManagerEntries(), '删除选中截图');
+        if (action === 'manager-delete-one') {
+            const entry = managerState.entries.find((item) => item.fileName === target.dataset.fileName);
+            if (entry) await deleteScreenshotEntries([entry], '删除截图');
+        }
         if (action === 'manager-view') openLightbox(target.dataset.fileName);
+    }
+
+    async function handleManagerChange(event) {
+        const target = event.target instanceof HTMLSelectElement ? event.target : null;
+        if (!target || target.dataset.action !== 'manager-sort' || !managerState) return;
+        const order = target.value === 'asc' ? 'asc' : 'desc';
+        managerState.sortOrder = order;
+        const storage = getStorage();
+        storage.screenshotSortOrder = order;
+        setStorage(storage);
+        await renderManager();
     }
 
     async function getDeletedFileName(deletedDirectory, originalName) {
@@ -1031,6 +1077,7 @@
             if (target.dataset.action === 'lightbox-jump') {
                 const video = getVideo();
                 if (video) video.currentTime = entry.seconds;
+                closeManager();
             }
             if (target.dataset.action === 'lightbox-delete') {
                 closeLightbox();
