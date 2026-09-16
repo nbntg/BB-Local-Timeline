@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili 本地时间轴跳转
 // @namespace    https://github.com/AliubYiero/Yiero_WebScripts
-// @version      2.4.1
+// @version      2.4.2
 // @description  导入本地时间轴、跳转视频，并将截图与截图时间线保存到本地文件夹。
 // @author       Codex
 // @match        https://www.bilibili.com/video/*
@@ -945,6 +945,20 @@
         grid.scrollTop = Math.max(0, Math.min(nextTop, grid.scrollHeight - grid.clientHeight));
     }
 
+    function captureManagerScrollRatio() {
+        const grid = managerState?.overlay?.querySelector('.codex-manager-grid');
+        if (!grid) return 0;
+        const maxScroll = Math.max(0, grid.scrollHeight - grid.clientHeight);
+        return maxScroll ? grid.scrollTop / maxScroll : 0;
+    }
+
+    function restoreManagerScrollRatio(ratio) {
+        const grid = managerState?.overlay?.querySelector('.codex-manager-grid');
+        if (!grid) return;
+        const maxScroll = Math.max(0, grid.scrollHeight - grid.clientHeight);
+        grid.scrollTop = Math.max(0, Math.min(maxScroll, maxScroll * ratio));
+    }
+
     async function refreshManager(scrollState = captureManagerScroll()) {
         if (!managerState) return;
         const timeline = await readScreenshotTimeline(managerState.directory);
@@ -978,14 +992,15 @@
 
     async function toggleManagerSort() {
         if (!managerState) return;
-        const scrollState = captureManagerScroll();
+        const scrollRatio = captureManagerScrollRatio();
         const order = managerState.sortOrder === 'desc' ? 'asc' : 'desc';
         managerState.sortOrder = order;
         const storage = getStorage();
         storage.screenshotSortOrder = order;
         setStorage(storage);
         await renderManager();
-        restoreManagerScroll(scrollState);
+        restoreManagerScrollRatio(scrollRatio);
+        window.requestAnimationFrame(() => restoreManagerScrollRatio(scrollRatio));
     }
 
     async function getDeletedFileName(deletedDirectory, originalName) {
