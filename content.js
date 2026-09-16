@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili 本地时间轴跳转
 // @namespace    https://github.com/AliubYiero/Yiero_WebScripts
-// @version      2.4.0
+// @version      2.4.1
 // @description  导入本地时间轴、跳转视频，并将截图与截图时间线保存到本地文件夹。
 // @author       Codex
 // @match        https://www.bilibili.com/video/*
@@ -453,7 +453,8 @@
             #${MANAGER_ID} .codex-manager-card:hover .codex-manager-delete-one, #${MANAGER_ID} .codex-manager-card:focus-within .codex-manager-delete-one { opacity:1; pointer-events:auto; }
             #${MANAGER_ID} .codex-manager-card .codex-manager-delete-one:hover { transform:scale(1.06); background:#d64545; }
             #${MANAGER_ID} .codex-manager-sort-label { display:inline-flex; align-items:center; gap:6px; margin-left:auto; color:#61666d; font-size:13px; }
-            #${MANAGER_ID} .codex-manager-sort { height:32px; padding:0 8px; color:#172033; background:#fff; border:1px solid #dfe3e8; border-radius:6px; font:inherit; }
+            #${MANAGER_ID} .codex-manager-toolbar button.codex-manager-sort { height:32px; padding:0 10px; color:#172033; background:#fff; border:1px solid #dfe3e8; border-radius:6px; font:inherit; }
+            #${MANAGER_ID} .codex-manager-toolbar button.codex-manager-sort:hover { color:#172033; background:#f4f6f8; }
             #${CAPTURE_STATUS_ID} { position:absolute!important; top:16px; right:16px; z-index:2147483000; max-width:min(260px,calc(100% - 32px)); margin:0; }
         `;
         if (!style.isConnected) document.head.appendChild(style);
@@ -813,7 +814,6 @@
             overlay.id = MANAGER_ID;
             managerState.overlay = overlay;
             overlay.addEventListener('click', handleManagerClick);
-            overlay.addEventListener('change', handleManagerChange);
             document.body.appendChild(overlay);
             await renderManager();
         } catch (error) {
@@ -852,16 +852,12 @@
         const toolbar = document.createElement('div');
         toolbar.className = 'codex-manager-toolbar';
         toolbar.append(makeButton('刷新', 'manager-refresh', 'secondary'), makeButton('清理失效记录', 'manager-clean-missing', 'secondary'), makeButton('批量删除选中项', 'manager-delete-selected', 'danger'));
-        const sortLabel = document.createElement('label');
+        const sortLabel = document.createElement('div');
         sortLabel.className = 'codex-manager-sort-label';
-        sortLabel.textContent = '排序';
-        const sortSelect = document.createElement('select');
-        sortSelect.dataset.action = 'manager-sort';
-        sortSelect.className = 'codex-manager-sort';
-        sortSelect.add(new Option('倒序（新→旧）', 'desc'));
-        sortSelect.add(new Option('正序（旧→新）', 'asc'));
-        sortSelect.value = managerState.sortOrder;
-        sortLabel.appendChild(sortSelect);
+        const sortButton = makeButton(managerState.sortOrder === 'desc' ? '倒序' : '正序', 'manager-sort', 'secondary codex-manager-sort');
+        sortButton.title = managerState.sortOrder === 'desc' ? '当前为倒序，点击切换为正序' : '当前为正序，点击切换为倒序';
+        sortButton.setAttribute('aria-label', sortButton.title);
+        sortLabel.appendChild(sortButton);
         toolbar.appendChild(sortLabel);
         overlay.appendChild(toolbar);
         const grid = document.createElement('div');
@@ -976,18 +972,20 @@
             const entry = managerState.entries.find((item) => item.fileName === target.dataset.fileName);
             if (entry) await deleteScreenshotEntries([entry], '删除截图');
         }
+        if (action === 'manager-sort') await toggleManagerSort();
         if (action === 'manager-view') openLightbox(target.dataset.fileName);
     }
 
-    async function handleManagerChange(event) {
-        const target = event.target instanceof HTMLSelectElement ? event.target : null;
-        if (!target || target.dataset.action !== 'manager-sort' || !managerState) return;
-        const order = target.value === 'asc' ? 'asc' : 'desc';
+    async function toggleManagerSort() {
+        if (!managerState) return;
+        const scrollState = captureManagerScroll();
+        const order = managerState.sortOrder === 'desc' ? 'asc' : 'desc';
         managerState.sortOrder = order;
         const storage = getStorage();
         storage.screenshotSortOrder = order;
         setStorage(storage);
         await renderManager();
+        restoreManagerScroll(scrollState);
     }
 
     async function getDeletedFileName(deletedDirectory, originalName) {
